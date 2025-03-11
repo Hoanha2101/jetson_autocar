@@ -10,7 +10,8 @@ from utils_func_go_str import CLEAN_DATA_CSV_DIRECTION, ADD_DATA_CSV_MASK_DIRECT
 
 import json
 
-data = json.loads("data.json")
+with open("data.json", "r", encoding="utf-8") as file:
+    json_data = json.load(file)
 
 serial_p = False
 if serial_p:
@@ -54,12 +55,12 @@ active = False  # Flag to track whether the AI processing is active
 clear = True
 push_results = []  # List lưu 5 kết quả push gần nhất
 
-count_json = 0
+count_json = 1
 
 def json_control(tuple_data):
     if serial_p: 
         serial_port.write(f"{tuple_data[0]}:000".encode())
-    print(tuple_data)
+    push_results.append(f"{tuple_data[0]}:000")
     time.sleep(tuple_data[1])
     
 while running:
@@ -77,37 +78,43 @@ while running:
 
     _, frame = cap.read()
     
-    data_item_json = json_data[f"state_{count_json}"]
     
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     visualization_img = frame
 
     if active:
+        data_item_json = json_data[f"state_{count_json}"]
         if clear:
             CLEAN_DATA_CSV_DIRECTION()
             CLEAN_DATA_CSV_DIRECTION_STRAIGHT()
-            # CLEAN_DATA_CSV_BACK_CONTROL()
             clear = False
+            
         for data_tuple in data_item_json:
             if data_tuple[0] != "S":
                 json_control(data_tuple)
             else:
             
-                visualization_img, PUSH_RETURN = AI_TRT(frame, paint=True, resize_img=True)
+                visualization_img, PUSH_RETURN, Have_lane = AI_TRT(frame, paint=True, resize_img=True)
                 
                 if PUSH_RETURN:
-                    serial_port.write(PUSH_RETURN.encode())
+                    if serial_p:
+                        serial_port.write(PUSH_RETURN.encode()) #
                     
-                    push_results.append(PUSH_RETURN)  # Thêm kết quả mới vào danh sách
                     angle = int(PUSH_RETURN.split(":")[1])
                     angle = min(30, angle)
                     sleep_time = angle / ROTATION_SPEED
                     time.sleep(sleep_time)
-                    push_results.append("x:000")
+                    
+                    if serial_p:
+                        serial_port.write(PUSH_STOP.encode())#
+                    
+                    push_results.append(PUSH_RETURN)
+                    push_results.append(PUSH_STOP)
                     
                     if len(push_results) > 5:
                         push_results.pop(0) 
 
+        count_json = count_json + 1
 
     pygame_frame = pygame.surfarray.make_surface(cv2.rotate(cv2.flip(visualization_img, 1), cv2.ROTATE_90_COUNTERCLOCKWISE))
     screen.blit(pygame_frame, (10, 10))
